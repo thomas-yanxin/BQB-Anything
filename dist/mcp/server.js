@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
 import { getBqbData, getCategories } from "../data/fetcher.js";
 import { search, getRandomEntries, getEntriesByCategory, } from "../search/engine.js";
+import { emotionToKeywords, EMOTION_LABELS } from "../search/emotions.js";
 const server = new Server({ name: "chinese-bqb", version: "1.0.0" }, { capabilities: { tools: {} } });
 // ── Tool definitions ──────────────────────────────────────────────────────────
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -74,6 +75,39 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
                         description: "可选：限定分类范围",
                     },
                 },
+            },
+        },
+        {
+            name: "recommend_meme",
+            description: `根据对话内容或情绪主动推荐合适的中文表情包。
+
+【何时调用】：在对话中，当你判断用一个表情包能更生动地表达情绪、回应用户、增加趣味性时，主动调用此工具。例如：
+- 用户说了好笑的事 → 推荐"开心/搞笑"类表情包
+- 用户表达了沮丧或抱怨 → 推荐"无奈"或"加油/鼓励"类
+- 用户分享了成就 → 推荐"赞赏/佩服"类
+- 用户说了奇怪的事 → 推荐"困惑/疑惑"或"惊讶/震惊"类
+
+【使用方式】：你负责理解情绪，填写 emotion 和 situation 参数；工具负责查找匹配的表情包。
+
+可用情绪标签: ${EMOTION_LABELS.join("、")}`,
+            inputSchema: {
+                type: "object",
+                properties: {
+                    emotion: {
+                        type: "string",
+                        description: `你判断出的情绪标签，从以下选择（或自由描述）：${EMOTION_LABELS.join("、")}`,
+                    },
+                    situation: {
+                        type: "string",
+                        description: "用一句话描述当前对话场景或要表达的意思，用于补充搜索。例如：'用户考试通过了很开心' 或 '对方说了很无厘头的话'",
+                    },
+                    count: {
+                        type: "number",
+                        description: "推荐数量，默认 3",
+                        default: 3,
+                    },
+                },
+                required: ["emotion"],
             },
         },
         {
@@ -175,6 +209,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 ],
             };
         }
+        if (name === "recommend_meme") {
+            const { emotion, situation, count = 3 } = args;
+            const entries = await getBqbData();
+            // Derive search keywords: emotion vocabulary + words from situation
+            const emotionKws = emotionToKeywords(emotion);
+            const situationKws = situation
+                ? situation
+                    .split(/[\s，,。！!？?、]+/)
+                    .filter((w) => w.length >= 2)
+                    .slice(0, 4)
+                : [];
+            // Try emotion keywords first for variety; supplement with situation
+            const allKeywords = [...new Set([...emotionKws, ...situationKws])];
+            // Search with combined keywords, get more than needed for diversity
+            const results = search(entries, allKeywords.join(" "), {
+                limit: Math.min(count * 3, 30),
+            });
+            // Pick diverse results: spread across different score buckets
+            const picked = pickDiverse(results, count);
+            if (picked.length === 0) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `未找到与情绪"${emotion}"匹配的表情包，建议用 search_meme 换关键词搜索。`,
+                        },
+                    ],
+                };
+            }
+            const lines = picked.map((e, i) => `${i + 1}. ${e.name}\n   分类: ${e.category}\n   ![${e.name}](${e.url})`);
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `为情绪"${emotion}"推荐 ${picked.length} 个表情包：\n\n${lines.join("\n\n")}`,
+                    },
+                ],
+            };
+        }
         if (name === "refresh_data") {
             await getBqbData(true);
             return {
@@ -194,6 +267,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
     }
 });
+// ── Helpers ───────────────────────────────────────────────────────────────────
+/**
+ * Pick N diverse entries from search results.
+ * Prefer spreading across different categories to avoid showing the same
+ * character/series for every recommendation.
+ */
+function pickDiverse(results, count) {
+    const picked = [];
+    const usedCategories = new Set();
+    // First pass: one per unique category (most diverse)
+    for (const r of results) {
+        if (picked.length >= count)
+            break;
+        if (!usedCategories.has(r.entry.category)) {
+            picked.push(r.entry);
+            usedCategories.add(r.entry.category);
+        }
+    }
+    // Second pass: fill remaining slots from any category
+    for (const r of results) {
+        if (picked.length >= count)
+            break;
+        if (!picked.includes(r.entry)) {
+            picked.push(r.entry);
+        }
+    }
+    return picked;
+}
 // ── Start server ──────────────────────────────────────────────────────────────
 async function main() {
     const transport = new StdioServerTransport();

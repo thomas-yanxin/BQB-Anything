@@ -11,6 +11,7 @@ import {
   getRandomEntries,
   getEntriesByCategory,
 } from "../search/engine.js";
+import { emotionToKeywords, EMOTION_LABELS } from "../search/emotions.js";
 import type { BqbEntry } from "../data/types.js";
 
 const program = new Command();
@@ -184,6 +185,56 @@ program
       }
     }
   );
+
+program
+  .command("recommend <emotion>")
+  .alias("rec")
+  .description(`根据情绪/场景推荐表情包。可用标签：${EMOTION_LABELS.slice(0, 5).join("、")} 等，或自由描述`)
+  .option("-n, --count <number>", "推荐数量", "3")
+  .option("-s, --situation <text>", "补充说明对话场景")
+  .action(async (emotion: string, opts: { count: string; situation?: string }) => {
+    try {
+      const entries = await loadData();
+
+      const emotionKws = emotionToKeywords(emotion);
+      const situationKws = opts.situation
+        ? opts.situation.split(/[\s，,。！!？?、]+/).filter((w) => w.length >= 2).slice(0, 4)
+        : [];
+      const allKeywords = [...new Set([...emotionKws, ...situationKws])];
+
+      const count = parseInt(opts.count, 10);
+      const results = search(entries, allKeywords.join(" "), { limit: count * 3 });
+
+      if (results.length === 0) {
+        console.log(chalk.yellow(`未找到与 "${emotion}" 匹配的表情包，试试 bqb search`));
+        return;
+      }
+
+      // Diverse pick: one per category first
+      const picked: BqbEntry[] = [];
+      const usedCats = new Set<string>();
+      for (const r of results) {
+        if (picked.length >= count) break;
+        if (!usedCats.has(r.entry.category)) {
+          picked.push(r.entry);
+          usedCats.add(r.entry.category);
+        }
+      }
+      for (const r of results) {
+        if (picked.length >= count) break;
+        if (!picked.includes(r.entry)) picked.push(r.entry);
+      }
+
+      console.log(chalk.green(`\n为"${emotion}"推荐 ${picked.length} 个表情包：\n`));
+      picked.forEach((e, i) => {
+        printEntry(e, i);
+        console.log();
+      });
+    } catch (err) {
+      console.error(chalk.red("推荐失败:"), err);
+      process.exit(1);
+    }
+  });
 
 program
   .command("refresh")
