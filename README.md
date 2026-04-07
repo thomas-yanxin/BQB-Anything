@@ -56,6 +56,36 @@ bqb refresh                     # 刷新数据缓存
 
 ## MCP Server
 
+### 配置 Codex CLI
+
+Codex CLI 支持直接接入本地 `stdio` MCP server，推荐把本项目注册成 `chinese-bqb`：
+
+```bash
+cd /path/to/BQB-Anything
+npm install
+npm run build
+
+codex mcp add chinese-bqb -- node /path/to/BQB-Anything/dist/mcp/server.js
+codex mcp list
+```
+
+如果你更想把配置限制在当前项目，也可以在仓库内创建 `.codex/config.toml`：
+
+```toml
+[mcp_servers.chinese-bqb]
+command = "node"
+args = ["/path/to/BQB-Anything/dist/mcp/server.js"]
+cwd = "/path/to/BQB-Anything"
+```
+
+进入 `codex` 会话后，可直接用自然语言触发工具，例如：
+
+```text
+帮我找 3 个表达无语/无奈的中文表情包。
+如果用户说“我拿到 offer 了”，帮我挑一个最合适的庆祝表情包。
+先列出分类，再给我猫和老鼠里最适合嘲讽的图。
+```
+
 ### 配置 Claude Desktop
 
 编辑 `~/Library/Application Support/Claude/claude_desktop_config.json`：
@@ -97,7 +127,7 @@ bqb refresh                     # 刷新数据缓存
 
 ---
 
-## Claude Code Skill
+## Claude Code Skill（与 Codex CLI 分开）
 
 将 `skills/bqb-search.md` 复制到你的 Claude Code 插件目录，可通过 `/bqb-search` 在对话中触发表情包搜索。
 
