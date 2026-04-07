@@ -8,6 +8,7 @@ import { join, extname } from "path";
 import { getBqbData, getCategories } from "../data/fetcher.js";
 import { search, getRandomEntries, getEntriesByCategory, } from "../search/engine.js";
 import { emotionToKeywords, EMOTION_LABELS } from "../search/emotions.js";
+import { PREVIEW_RENDERERS, previewEntries, } from "./preview.js";
 const program = new Command();
 program
     .name("bqb")
@@ -32,6 +33,14 @@ async function loadData(forceRefresh = false) {
         throw err;
     }
 }
+async function maybePreview(entries, opts) {
+    if (!opts.preview || entries.length === 0)
+        return;
+    const renderer = await previewEntries(entries, {
+        renderer: opts.renderer ?? "auto",
+    });
+    console.log(chalk.dim(`\n已使用 ${renderer} 模式预览 ${entries.length} 张图片。`));
+}
 // ── Commands ──────────────────────────────────────────────────────────────────
 program
     .command("search <query>")
@@ -39,6 +48,8 @@ program
     .description("按关键词搜索表情包（支持中文，多词用空格分隔）")
     .option("-n, --limit <number>", "返回数量上限", "10")
     .option("-c, --category <name>", "限定搜索分类")
+    .option("-p, --preview", "直接在终端中预览图片")
+    .option("--renderer <name>", `预览模式：${PREVIEW_RENDERERS.join(", ")}`, "auto")
     .action(async (query, opts) => {
     try {
         const entries = await loadData();
@@ -56,6 +67,7 @@ program
             printEntry(r.entry, i);
             console.log();
         });
+        await maybePreview(results.map((r) => r.entry), opts);
     }
     catch (err) {
         console.error(chalk.red("搜索失败:"), err);
@@ -86,6 +98,8 @@ program
     .description("随机获取表情包")
     .option("-n, --count <number>", "随机数量", "1")
     .option("-c, --category <name>", "限定分类范围")
+    .option("-p, --preview", "直接在终端中预览图片")
+    .option("--renderer <name>", `预览模式：${PREVIEW_RENDERERS.join(", ")}`, "auto")
     .action(async (opts) => {
     try {
         let entries = await loadData();
@@ -102,9 +116,43 @@ program
             printEntry(e, i);
             console.log();
         });
+        await maybePreview(results, opts);
     }
     catch (err) {
         console.error(chalk.red("获取失败:"), err);
+        process.exit(1);
+    }
+});
+program
+    .command("preview <query>")
+    .alias("pv")
+    .description("搜索后直接在终端中预览表情包")
+    .option("-n, --limit <number>", "预览数量上限", "1")
+    .option("-c, --category <name>", "限定搜索分类")
+    .option("--renderer <name>", `预览模式：${PREVIEW_RENDERERS.join(", ")}`, "auto")
+    .action(async (query, opts) => {
+    try {
+        const entries = await loadData();
+        const results = search(entries, query, {
+            limit: parseInt(opts.limit, 10),
+            category: opts.category,
+        });
+        if (results.length === 0) {
+            console.log(chalk.yellow(`\n没有找到与 "${query}" 相关的表情包`));
+            return;
+        }
+        console.log(chalk.green(`\n找到 ${results.length} 个与 "${query}" 相关的表情包，开始预览：\n`));
+        results.forEach((r, i) => {
+            printEntry(r.entry, i);
+            console.log();
+        });
+        const renderer = await previewEntries(results.map((r) => r.entry), {
+            renderer: opts.renderer ?? "auto",
+        });
+        console.log(chalk.dim(`\n已使用 ${renderer} 模式完成预览。`));
+    }
+    catch (err) {
+        console.error(chalk.red("预览失败:"), err);
         process.exit(1);
     }
 });
@@ -166,6 +214,8 @@ program
     .description(`根据情绪/场景推荐表情包。可用标签：${EMOTION_LABELS.slice(0, 5).join("、")} 等，或自由描述`)
     .option("-n, --count <number>", "推荐数量", "3")
     .option("-s, --situation <text>", "补充说明对话场景")
+    .option("-p, --preview", "直接在终端中预览图片")
+    .option("--renderer <name>", `预览模式：${PREVIEW_RENDERERS.join(", ")}`, "auto")
     .action(async (emotion, opts) => {
     try {
         const entries = await loadData();
@@ -202,6 +252,7 @@ program
             printEntry(e, i);
             console.log();
         });
+        await maybePreview(picked, opts);
     }
     catch (err) {
         console.error(chalk.red("推荐失败:"), err);

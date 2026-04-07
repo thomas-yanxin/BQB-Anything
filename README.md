@@ -42,6 +42,33 @@ bqb rec "惊讶/震惊" -s "朋友说要去火星旅行"   # 补充场景描述
 
 可用情绪标签：`开心/高兴`、`无奈/叹气`、`鄙视/嘲讽`、`生气/愤怒`、`难过/伤心`、`赞赏/佩服`、`困惑/疑惑`、`加油/鼓励`、`撒娇/求人`、`尴尬/无语`、`得意/炫耀`、`困/累/摸鱼`、`惊讶/震惊`、`支持/赞同`
 
+### 终端直接看图
+
+如果你的终端支持图片协议（如 iTerm2、Kitty、Ghostty、WezTerm），`bqb` 会优先尝试用对应模式直接显示图片；否则会自动退化为 `chafa` 字符画预览。
+
+```bash
+bqb preview "无语"
+bqb preview "猫 开心" -n 3
+bqb search "无奈" --preview -n 1
+bqb recommend "开心/高兴" -s "拿到 offer 了" --preview -n 1
+```
+
+可手动指定预览模式：
+
+```bash
+bqb preview "无语" --renderer auto
+bqb preview "无语" --renderer kitty
+bqb preview "无语" --renderer iterm
+bqb preview "无语" --renderer symbols
+bqb preview "无语" --renderer open   # 用系统图片查看器打开
+```
+
+推荐先安装 `chafa` 作为通用预览后备：
+
+```bash
+brew install chafa
+```
+
 ### 其他命令
 
 ```bash
@@ -84,6 +111,14 @@ cwd = "/path/to/BQB-Anything"
 帮我找 3 个表达无语/无奈的中文表情包。
 如果用户说“我拿到 offer 了”，帮我挑一个最合适的庆祝表情包。
 先列出分类，再给我猫和老鼠里最适合嘲讽的图。
+```
+
+如果你想在 Codex CLI 里直接看到图，而不是只拿到 URL，最简单的是直接运行本地命令：
+
+```text
+!bqb preview "无语"
+!bqb search "无奈" --preview -n 1
+!bqb recommend "开心/高兴" -s "拿到 offer 了" --preview -n 1
 ```
 
 ### 配置 Claude Desktop
@@ -130,6 +165,13 @@ cwd = "/path/to/BQB-Anything"
 ## Claude Code Skill（与 Codex CLI 分开）
 
 将 `skills/bqb-search.md` 复制到你的 Claude Code 插件目录，可通过 `/bqb-search` 在对话中触发表情包搜索。
+
+如果你是在 Claude Code CLI 里想直接看图，也建议直接运行本地命令：
+
+```text
+!bqb preview "无语"
+!bqb search "摸鱼" --preview -n 1
+```
 
 ---
 
